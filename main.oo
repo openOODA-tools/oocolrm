@@ -1,52 +1,140 @@
 // # oocolrm Main Entry Point
 //
-// Logline: Strips character columns from line streams using precise byte column boundaries.
+// Logline: Sovereign column stripper removing selected character columns from line streams.
 //
-// Setup: Demands explicit capability tokens and standard argument list.
+// Setup: Demands explicit FsReadCap, ProcessCap, and EnvCap tokens under negative-trust boundaries.
 //
 // Beats:
 //   1. Parse command-line options and dispatch --help, --version, or --mcp.
-//   2. Execute capability-bounded oocolrm operations.
-//   3. Format and output structured results to standard output.
+//   2. Ingest stream from file path or standard input under FsReadCap.
+//   3. Apply column excision, tab expansions, or character replacements.
+//   4. Deliver transformed text, inspection reports, or JSON telemetry.
 
-fn render_help() -> String {
-    return "oocolrm 0.1.0 (openOODA sovereign search & inspection)\n"
-        + "usage: oocolrm [options] [ARGUMENTS]...\n\n"
-        + "Strips character columns from line streams using precise byte column boundaries.\n\n"
+import "core/colrm_types.oo";
+import "core/colrm_engine.oo";
+import "core/colrm_demo.oo";
+import "render/colrm_theme.oo";
+import "ipc/colrm_opts.oo";
+import "ipc/mcp_serve.oo";
+import "anchor.oo";
+
+pub fn render_help() -> String {
+    return "oocolrm 0.2.0 (openOODA sovereign column stripper)\n"
+        + "usage: oocolrm [options] [start [stop]] [FILE]\n\n"
+        + "Remove selected columns from each line of a file or standard input.\n\n"
         + "Options:\n"
-        + "  -h, --help           display this help and exit\n"
-        + "  -v, --version        output version information and exit\n"
-        + "      --json           output formatted as JSON Lines\n"
-        + "      --color <WHEN>   colorize output: auto, always, never [default: auto]\n"
-        + "      --theme <NAME>   override active oote palette\n"
-        + "      --mcp            run as Model Context Protocol stdio server\n";
+        + "  -s, --start NUM        starting column index (1-based)\n"
+        + "  -e, --stop NUM         ending column index inclusive\n"
+        + "  -x, --expand-tabs      expand tabs to column spaces before stripping\n"
+        + "  -t, --tab NUM          tab stop width [default: 8]\n"
+        + "  -r, --replace CHAR     replace stripped columns with character instead of deletion\n"
+        + "  -v, --invert           invert range: keep selected columns, strip the rest\n"
+        + "      --inspect          display execution statistics summary\n"
+        + "      --demo             run demonstration scenario with synthetic log data\n"
+        + "      --json             output formatted as JSON telemetry\n"
+        + "  -h, --help             display this help and exit\n"
+        + "  -V, --version          output version information and exit\n"
+        + "      --mcp              run as Model Context Protocol stdio server\n";
 }
 
-fn render_version() -> String {
-    return "oocolrm 0.1.0 (openOODA sovereign search & inspection)\n";
+pub fn render_version() -> String {
+    return "oocolrm 0.2.0 (openOODA sovereign column stripper)\n";
 }
 
-fn main(args: List[String]) -> Int {
-    let num_args: Int = list_len(args);
-    let mut i: Int = 0;
+fn read_all_stdin(fs: &FsReadCap) -> String {
+    let mut acc: String = "";
+    let mut running: Bool = true;
+    while running {
+        let r: Result[String, String] = oo_read_stdin_chunk(fs, 4096);
+        if !r.is_ok() {
+            running = false;
+        } else {
+            let chunk: String = match r { Ok(s) => s, Err(_) => "" };
+            if chars_len(chunk) == 0 {
+                running = false;
+            } else {
+                acc = acc + chunk;
+            }
+        }
+    }
+    return acc;
+}
 
-    while i < num_args {
-        let arg: String = list_get(args, i);
-        if arg == "-h" || arg == "--help" {
-            print(render_help());
-            return 0;
+pub fn main(
+    fs: &FsReadCap,
+    _proc_cap: &ProcessCap,
+    _env: &EnvCap,
+    args: List[String]
+) -> Result[Int, String] {
+    let opts: ColrmCliOpts = parse_cli_args(args);
+
+    if opts.help {
+        print(render_help());
+        process_exit(0);
+        return Ok(0);
+    }
+    if opts.version {
+        print(render_version());
+        process_exit(0);
+        return Ok(0);
+    }
+    if opts.mcp {
+        run_mcp_server(fs);
+        process_exit(0);
+        return Ok(0);
+    }
+    if opts.demo {
+        let demo_res: ColrmRunResult = run_colrm_demo();
+        let demo_cfg: ColrmConfig = make_colrm_config(1, 21, false, 8, "", false);
+        if opts.json {
+            print(render_json_telemetry(demo_res, demo_cfg));
+        } else if opts.inspect {
+            print(render_stats_card(demo_res.stats));
+        } else {
+            print("--- Original Input ---\n" + build_log_fixture() + "\n");
+            print("--- Output (Columns 1-21 Stripped) ---\n" + demo_res.output);
         }
-        if arg == "-v" || arg == "--version" {
-            print(render_version());
-            return 0;
-        }
-        if arg == "--mcp" {
-            print("{\"jsonrpc\":\"2.0\",\"result\":{\"status\":\"ready\",\"tool\":\"oocolrm\"}}\n");
-            return 0;
-        }
-        i = i + 1;
+        process_exit(0);
+        return Ok(0);
     }
 
-    print("oocolrm: sovereign capability-bounded utility ready\n");
-    return 0;
+    let mut content: String = "";
+    if chars_len(opts.file_path) > 0 && opts.file_path != "-" {
+        let r: Result[String, String] = read_file(fs, opts.file_path);
+        if !r.is_ok() {
+            print("oocolrm: cannot open '" + opts.file_path + "' for reading\n");
+            process_exit(1);
+            return Ok(1);
+        }
+        content = match r { Ok(s) => s, Err(_) => "" };
+    } else {
+        content = read_all_stdin(fs);
+    }
+
+    // Default configuration: if no start given, start from column 1
+    let cfg: ColrmConfig = make_colrm_config(
+        opts.start,
+        opts.stop,
+        opts.expand_tabs,
+        opts.tab_width,
+        opts.replace_char,
+        opts.invert
+    );
+
+    let res: ColrmRunResult = strip_text_stream(content, cfg);
+
+    if opts.json {
+        print(render_json_telemetry(res, cfg));
+        process_exit(0);
+        return Ok(0);
+    }
+    if opts.inspect {
+        print(render_stats_card(res.stats));
+        process_exit(0);
+        return Ok(0);
+    }
+
+    print(res.output);
+    process_exit(0);
+    return Ok(0);
 }

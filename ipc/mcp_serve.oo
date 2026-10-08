@@ -1,0 +1,141 @@
+// # Model Context Protocol (MCP) Server for oocolrm
+//
+// Logline: JSON-RPC 2.0 stdio server providing sovereign column stripping, slice cutting, and inspection tools.
+//
+// Setup: Services agent tool invocations over standard input without ambient network authority.
+//
+// Beats:
+//   1. Handle MCP initialize handshake with server metadata.
+//   2. Expose tools/list catalogue with five sovereign column manipulation tools.
+//   3. Dispatch tools/call for strip, slice, replace, inspect, and stats.
+//   4. Deliver streaming JSON-RPC responses over standard output.
+
+import "core/colrm_types.oo";
+import "core/colrm_engine.oo";
+import "render/colrm_theme.oo";
+import "ipc/json_field.oo";
+
+fn build_error(id: String, code: Int, msg: String) -> String {
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"error\":{\"code\":" + to_string(code) + ",\"message\":\"" + json_escape(msg) + "\"}}\n";
+}
+
+fn build_tool_result(id: String, text: String) -> String {
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape(text) + "\"}]}}\n";
+}
+
+pub fn render_mcp_init(id: String) -> String {
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"oocolrm\",\"version\":\"0.2.0\"}}}\n";
+}
+
+pub fn render_mcp_tools_list(id: String) -> String {
+    let mut out: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":{\"tools\":[";
+    out = out + "{\"name\":\"colrm_strip\",\"description\":\"Strip 1-indexed column range from each line of text.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"start\":{\"type\":\"integer\"},\"stop\":{\"type\":\"integer\"},\"expand_tabs\":{\"type\":\"boolean\"},\"tab_width\":{\"type\":\"integer\"}},\"required\":[\"text\",\"start\"]}},";
+    out = out + "{\"name\":\"colrm_slice\",\"description\":\"Extract and keep only the specified column range from each line of text.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"start\":{\"type\":\"integer\"},\"stop\":{\"type\":\"integer\"}},\"required\":[\"text\",\"start\"]}},";
+    out = out + "{\"name\":\"colrm_replace\",\"description\":\"Replace specified column range with a recurring replacement character.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"start\":{\"type\":\"integer\"},\"stop\":{\"type\":\"integer\"},\"replace_char\":{\"type\":\"string\"}},\"required\":[\"text\",\"start\",\"stop\",\"replace_char\"]}},";
+    out = out + "{\"name\":\"colrm_inspect\",\"description\":\"Inspect line column positions with visual ruler and character count report.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"start\":{\"type\":\"integer\"},\"stop\":{\"type\":\"integer\"}},\"required\":[\"text\",\"start\"]}},";
+    out = out + "{\"name\":\"colrm_stats\",\"description\":\"Process text and return aggregate telemetry statistics in structured JSON.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"start\":{\"type\":\"integer\"},\"stop\":{\"type\":\"integer\"}},\"required\":[\"text\",\"start\"]}}";
+    out = out + "]}}\n";
+    return out;
+}
+
+pub fn handle_mcp_call(
+    id: String,
+    tool_name: String,
+    req: String
+) -> String {
+    let text: String = extract_json_str(req, "text");
+    let start: Int = extract_json_int(req, "start", 1);
+    let stop: Int = extract_json_int(req, "stop", 0);
+
+    if tool_name == "colrm_strip" {
+        let expand_tabs_flag: Bool = extract_json_bool(req, "expand_tabs", false);
+        let tab_width: Int = extract_json_int(req, "tab_width", 8);
+        let cfg: ColrmConfig = make_colrm_config(start, stop, expand_tabs_flag, tab_width, "", false);
+        let res: ColrmRunResult = strip_text_stream(text, cfg);
+        return build_tool_result(id, res.output);
+    }
+
+    if tool_name == "colrm_slice" {
+        let cfg: ColrmConfig = make_colrm_config(start, stop, false, 8, "", true);
+        let res: ColrmRunResult = strip_text_stream(text, cfg);
+        return build_tool_result(id, res.output);
+    }
+
+    if tool_name == "colrm_replace" {
+        let rep: String = extract_json_str(req, "replace_char");
+        let cfg: ColrmConfig = make_colrm_config(start, stop, false, 8, rep, false);
+        let res: ColrmRunResult = strip_text_stream(text, cfg);
+        return build_tool_result(id, res.output);
+    }
+
+    if tool_name == "colrm_inspect" {
+        let cfg: ColrmConfig = make_colrm_config(start, stop, false, 8, "", false);
+        let lr: LineResult = strip_line(text, cfg);
+        let card: String = render_inspection_card(lr, cfg.range);
+        return build_tool_result(id, card);
+    }
+
+    if tool_name == "colrm_stats" {
+        let cfg: ColrmConfig = make_colrm_config(start, stop, false, 8, "", false);
+        let res: ColrmRunResult = strip_text_stream(text, cfg);
+        let json_out: String = render_json_telemetry(res, cfg);
+        return build_tool_result(id, json_out);
+    }
+
+    return build_error(id, -32601, "Unknown tool: " + tool_name);
+}
+
+pub fn handle_mcp_message(req: String) -> String {
+    let id_str: String = extract_json_str(req, "id");
+    let id: String = if chars_len(id_str) > 0 { "\"" + id_str + "\"" } else { "1" };
+    let method: String = extract_json_str(req, "method");
+
+    if method == "initialize" {
+        return render_mcp_init(id);
+    }
+    if method == "notifications/initialized" {
+        return "";
+    }
+    if method == "tools/list" {
+        return render_mcp_tools_list(id);
+    }
+    if method == "tools/call" {
+        let tool_name: String = extract_json_str(req, "name");
+        return handle_mcp_call(id, tool_name, req);
+    }
+    if method == "shutdown" {
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"result\":null}\n";
+    }
+    return build_error(id, -32601, "Method not found: " + method);
+}
+
+pub fn run_mcp_server(fs: &FsReadCap) {
+    let mut buf: String = "";
+    let mut running: Bool = true;
+    while running {
+        let r: Result[String, String] = oo_read_stdin_chunk(fs, 4096);
+        if !r.is_ok() {
+            running = false;
+        } else {
+            let chunk: String = match r { Ok(s) => s, Err(_) => "" };
+            if chars_len(chunk) == 0 {
+                running = false;
+            } else {
+                buf = buf + chunk;
+                let mut nl_pos: Int = str_index_of(buf, "\n");
+                while nl_pos >= 0 {
+                    let line: String = str_slice(buf, 0, nl_pos);
+                    buf = str_slice(buf, nl_pos + 1, chars_len(buf));
+                    let trimmed: String = str_trim(line);
+                    if chars_len(trimmed) > 0 {
+                        let resp: String = handle_mcp_message(trimmed);
+                        if chars_len(resp) > 0 {
+                            print(resp);
+                        }
+                    }
+                    nl_pos = str_index_of(buf, "\n");
+                }
+            }
+        }
+    }
+}

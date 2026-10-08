@@ -1,0 +1,45 @@
+// # oocolrm Render Subsystem Verification Anchor
+//
+// Logline: Verification anchor certifying terminal column rulers, inspection cards, and JSON telemetry streams.
+//
+// Setup: Validates visual renderers and structured serializers against deterministic line records.
+//
+// Beats:
+//   1. Assert column ruler alignment and digit sequence generation.
+//   2. Assert inspection card format containing before/after comparison.
+//   3. Assert summary statistics card formatting.
+//   4. Validate structured JSON telemetry schema.
+
+import "core/colrm_types.oo";
+import "core/colrm_engine.oo";
+import "render/colrm_theme.oo";
+
+pub fn verify_render_subsystem() -> Bool {
+    let ruler: String = build_column_ruler(20);
+    if !str_contains(ruler, "1") || !str_contains(ruler, "+") {
+        return false;
+    }
+
+    let cfg: ColrmConfig = make_colrm_config(3, 6, false, 8, "", false);
+    let lr: LineResult = strip_line("1234567890", cfg);
+    let card: String = render_inspection_card(lr, cfg.range);
+    if !str_contains(card, "Column Inspection") || !str_contains(card, "Stripped:  4 characters") {
+        return false;
+    }
+
+    let mut stats: ColrmStats = make_colrm_stats();
+    stats.lines_processed = 10;
+    stats.chars_stripped = 40;
+    let report: String = render_stats_card(stats);
+    if !str_contains(report, "Execution Statistics") || !str_contains(report, "10") {
+        return false;
+    }
+
+    let run_res: ColrmRunResult = make_colrm_run_result("127890\n", stats);
+    let json_out: String = render_json_telemetry(run_res, cfg);
+    if !str_contains(json_out, "\"tool\":\"oocolrm\"") || !str_contains(json_out, "\"lines_processed\":10") {
+        return false;
+    }
+
+    return true;
+}

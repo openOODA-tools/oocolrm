@@ -1,0 +1,68 @@
+// # oocolrm Core Verification Anchor
+//
+// Logline: Verification anchor certifying column slicing, boundary safety, tab expansion, and stream processing.
+//
+// Setup: Validates column stripping engine against mathematical invariants and POSIX fixtures.
+//
+// Beats:
+//   1. Assert single-argument truncation from start to end-of-line.
+//   2. Assert bounded two-argument column range excision.
+//   3. Assert tab expansion column stop calculations.
+//   4. Assert multi-line stream execution and telemetry counts.
+
+import "core/colrm_types.oo";
+import "core/colrm_engine.oo";
+import "core/colrm_demo.oo";
+
+pub fn verify_core_subsystem() -> Bool {
+    // 1. Single argument truncation: colrm 5 on "1234567890" -> "1234"
+    let cfg1: ColrmConfig = make_colrm_config(5, 0, false, 8, "", false);
+    let r1: LineResult = strip_line("1234567890", cfg1);
+    if r1.processed != "1234" || r1.stripped_count != 6 {
+        return false;
+    }
+
+    // 2. Bounded range: colrm 4 7 on "1234567890" -> "123890"
+    let cfg2: ColrmConfig = make_colrm_config(4, 7, false, 8, "", false);
+    let r2: LineResult = strip_line("1234567890", cfg2);
+    if r2.processed != "123890" || r2.stripped_count != 4 {
+        return false;
+    }
+
+    // 3. First columns: colrm 1 3 on "abcdefgh" -> "defgh"
+    let cfg3: ColrmConfig = make_colrm_config(1, 3, false, 8, "", false);
+    let r3: LineResult = strip_line("abcdefgh", cfg3);
+    if r3.processed != "defgh" || r3.stripped_count != 3 {
+        return false;
+    }
+
+    // 4. Invert mode (slice extraction): keep columns 3 through 6 of "abcdefgh" -> "cdef"
+    let cfg4: ColrmConfig = make_colrm_config(3, 6, false, 8, "", true);
+    let r4: LineResult = strip_line("abcdefgh", cfg4);
+    if r4.processed != "cdef" {
+        return false;
+    }
+
+    // 5. Replacement char: replace columns 4 through 6 with '.' on "123456789" -> "123...789"
+    let cfg5: ColrmConfig = make_colrm_config(4, 6, false, 8, ".", false);
+    let r5: LineResult = strip_line("123456789", cfg5);
+    if r5.processed != "123...789" {
+        return false;
+    }
+
+    // 6. Tab expansion: "a\tb" expanded with 8-column tab stop -> "a       b"
+    let expanded: String = expand_tabs("a\tb", 8);
+    if expanded != "a       b" {
+        return false;
+    }
+
+    // 7. Multi-line stream processing
+    let num_fix: String = build_numeric_fixture();
+    let stream_res: ColrmRunResult = strip_text_stream(num_fix, cfg2);
+    let stats: ColrmStats = stream_res.stats;
+    if stats.lines_processed != 3 || stats.chars_stripped != 12 {
+        return false;
+    }
+
+    return true;
+}

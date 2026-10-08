@@ -54,47 +54,78 @@ oocolrm-uninstall
 ## 2. CLI Usage
 
 ```
-usage: oocolrm [options] [ARGUMENTS]...
+usage: oocolrm [options] [start [stop]] [FILE]
 
-Strips character columns from line streams using precise byte column boundaries.
+Remove selected columns from each line of a file or standard input.
 
 Options:
-  -h, --help           display this help and exit
-  -v, --version        output version information and exit
-      --json           output formatted as JSON Lines
-      --color <WHEN>   colorize output: auto, always, never [default: auto]
-      --theme <NAME>   override active oote palette
-      --mcp            run as Model Context Protocol stdio server
+  -s, --start NUM        starting column index (1-based)
+  -e, --stop NUM         ending column index inclusive
+  -x, --expand-tabs      expand tabs to column spaces before stripping
+  -t, --tab NUM          tab stop width [default: 8]
+  -r, --replace CHAR     replace stripped columns with character instead of deletion
+  -v, --invert           invert range: keep selected columns, strip the rest
+      --inspect          display execution statistics summary
+      --demo             run demonstration scenario with synthetic log data
+      --json             output formatted as JSON telemetry
+  -h, --help             display this help and exit
+  -V, --version          output version information and exit
+      --mcp              run as Model Context Protocol stdio server
+```
+
+### Examples
+
+```bash
+# Strip column 5 to end of line from each row
+oocolrm 5 < file.txt
+
+# Remove columns 4 through 7 inclusive
+oocolrm 4 7 file.txt
+
+# Remove first 3 columns
+oocolrm 1 3 file.txt
+
+# Expand tabs and strip columns 10 through 20
+oocolrm 10 20 -x -t 8 file.txt
+
+# Replace columns 5 through 10 with '.' (masking sensitive data)
+oocolrm 5 10 -r "." file.txt
+
+# Invert selection (keep only columns 4 through 8, remove the rest)
+oocolrm 4 8 -v file.txt
+
+# Run demonstration with telemetry
+oocolrm --demo --json
 ```
 
 ---
 
-## 3. Theming Integration (`oote`)
+## 3. Model Context Protocol (MCP)
 
-`oocolrm` synchronizes visual styles and status colors with [oote](https://github.com/openOODA-tools/oote):
-* **Configuration:** Reads active palette from `~/.openooda/theme.oot`.
-* **Environment Overrides:** Respects `$OODA_THEME` and `$NO_COLOR`.
-
----
-
-## 4. Model Context Protocol (MCP)
-
-When invoked with `--mcp`, `oocolrm` runs a JSON-RPC 2.0 stdio server providing structured tools for AI coding agents:
+When invoked with `--mcp`, `oocolrm` operates as a JSON-RPC 2.0 stdio server providing sovereign column manipulation tools for AI agents without network authority:
 
 ```bash
 oocolrm --mcp
 ```
 
+### Exposed MCP Tools
+
+1. **`colrm_strip`**: Strip 1-indexed column range `[start, stop]` from each line of text.
+2. **`colrm_slice`**: Extract and keep only specified column range from each line (inverted excision).
+3. **`colrm_replace`**: Replace specified column range with recurring filler characters.
+4. **`colrm_inspect`**: Inspect lines with a terminal column ruler and before/after character metrics.
+5. **`colrm_stats`**: Stream text through column stripper and return aggregate metrics in JSON.
+
 ---
 
-## 5. Security & Zero Ambient Authority
+## 4. Security & Zero Ambient Authority
 
-* **Pure Capability Bounded:** Operates strictly with explicit tokens (&FsReadCap, &TermCap, &McpCap). Physical absence of ambient disk/net leakage.
-* **Negative-Trust Architecture:** Strict input validation and operational limits.
+* **Pure Capability Bounded:** Operates strictly with explicit tokens (`&FsReadCap`, `&ProcessCap`, `&EnvCap`). Zero ambient authority or network egress.
+* **Negative-Trust Architecture:** Strict boundary validation on 1-indexed columns, tab calculations, and line buffers.
 * **Hermetic Binary:** Standalone zero-dependency executable.
 
 ---
 
-## 6. License
+## 5. License
 
 Apache License, Version 2.0. See [LICENSE](LICENSE) for details.

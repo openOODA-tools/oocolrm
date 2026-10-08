@@ -1,13 +1,31 @@
-// # oocolrm Root Anchor
+// # oocolrm Root Subsystem Anchor
 //
-// Logline: Top-level anchor re-exporting options, core logic, render, and ipc subsystems.
+// Logline: Unified verification anchor certifying core column slicing, visual inspection, and IPC protocols.
 //
-// Setup: Pure shim re-exporting all oocolrm subsystem anchors.
+// Setup: Executes complete subsystem assertions across slicing engine, terminal renderers, and stdio IPC.
 //
 // Beats:
-//   1. Re-export options parsing subsystem.
-//   2. Re-export core oocolrm execution engine.
-//   3. Re-export render formatting subsystem.
-//   4. Re-export Model Context Protocol (MCP) IPC subsystem.
+//   1. Re-export and verify core column slicing engine.
+//   2. Re-export and verify terminal ruler and telemetry renderer.
+//   3. Re-export and verify JSON-RPC stdio IPC protocol subsystem.
+//   4. Supply top-level verification suite predicate.
 
-import "main.oo";
+import "core/anchor.oo";
+import "render/anchor.oo";
+import "ipc/anchor.oo";
+
+pub fn verify_all_subsystems(fs: &FsReadCap) -> Bool {
+    if !verify_core_subsystem() {
+        return false;
+    }
+
+    if !verify_render_subsystem() {
+        return false;
+    }
+
+    if !verify_ipc_subsystem(fs) {
+        return false;
+    }
+
+    return true;
+}

@@ -1,0 +1,81 @@
+// # oocolrm Visual Rendering and Telemetry
+//
+// Logline: Formats terminal column rulers, inspection cards, processing reports, and JSON telemetry streams.
+//
+// Setup: Generates ANSI diagnostics and structured metrics for CLI and MCP surfaces.
+//
+// Beats:
+//   1. Build aligned numeric column ruler up to specified column width.
+//   2. Render line inspection report highlighting original and stripped output.
+//   3. Render execution statistics summary card.
+//   4. Generate structured JSON telemetry.
+
+import "core/colrm_types.oo";
+
+pub fn build_column_ruler(width: Int) -> String {
+    let w: Int = if width <= 0 { 40 } else if width > 120 { 120 } else { width };
+    let mut tens_line: String = "";
+    let mut ones_line: String = "";
+    let mut i: Int = 1;
+
+    while i <= w {
+        if i % 10 == 0 {
+            tens_line = tens_line + to_string((i / 10) % 10);
+            ones_line = ones_line + "0";
+        } else if i % 5 == 0 {
+            tens_line = tens_line + "+";
+            ones_line = ones_line + "5";
+        } else {
+            tens_line = tens_line + "-";
+            ones_line = ones_line + to_string(i % 10);
+        }
+        i = i + 1;
+    }
+
+    return tens_line + "\n" + ones_line + "\n";
+}
+
+pub fn render_inspection_card(lr: LineResult, range: ColrmRange) -> String {
+    let mut out: String = "========================================================\n";
+    out = out + "               oocolrm Column Inspection               \n";
+    out = out + "========================================================\n";
+    out = out + "Target Range: columns " + to_string(range.start) + " through " + (if range.stop <= 0 { "end-of-line" } else { to_string(range.stop) }) + "\n";
+    out = out + "--------------------------------------------------------\n";
+    out = out + "Ruler:\n" + build_column_ruler(chars_len(lr.original));
+    out = out + "Original:  " + lr.original + "\n";
+    out = out + "Processed: " + lr.processed + "\n";
+    out = out + "Stripped:  " + to_string(lr.stripped_count) + " characters\n";
+    out = out + "========================================================\n";
+    return out;
+}
+
+pub fn render_stats_card(stats: ColrmStats) -> String {
+    let mut out: String = "========================================================\n";
+    out = out + "              oocolrm Execution Statistics             \n";
+    out = out + "========================================================\n";
+    out = out + "Lines Processed:    " + to_string(stats.lines_processed) + "\n";
+    out = out + "Characters Stripped:" + to_string(stats.chars_stripped) + "\n";
+    out = out + "Bytes In:           " + to_string(stats.bytes_in) + " B\n";
+    out = out + "Bytes Out:          " + to_string(stats.bytes_out) + " B\n";
+    out = out + "========================================================\n";
+    return out;
+}
+
+pub fn render_json_telemetry(res: ColrmRunResult, cfg: ColrmConfig) -> String {
+    let stats: ColrmStats = res.stats;
+    let mut j: String = "{\"tool\":\"oocolrm\",\"version\":\"0.2.0\",";
+    j = j + "\"config\":{";
+    j = j + "\"start\":" + to_string(cfg.range.start) + ",";
+    j = j + "\"stop\":" + to_string(cfg.range.stop) + ",";
+    j = j + "\"expand_tabs\":" + (if cfg.expand_tabs { "true" } else { "false" }) + ",";
+    j = j + "\"tab_width\":" + to_string(cfg.tab_width) + ",";
+    j = j + "\"invert\":" + (if cfg.invert { "true" } else { "false" });
+    j = j + "},";
+    j = j + "\"stats\":{";
+    j = j + "\"lines_processed\":" + to_string(stats.lines_processed) + ",";
+    j = j + "\"chars_stripped\":" + to_string(stats.chars_stripped) + ",";
+    j = j + "\"bytes_in\":" + to_string(stats.bytes_in) + ",";
+    j = j + "\"bytes_out\":" + to_string(stats.bytes_out);
+    j = j + "}}\n";
+    return j;
+}

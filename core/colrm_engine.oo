@@ -1,0 +1,151 @@
+// # oocolor Column Removal Engine
+//
+// Logline: Sovereign column stripper executing POSIX colrm truncations, tab expansions, and replacements.
+//
+// Setup: Pure algorithmic line and stream processing with negative-trust boundary verification.
+//
+// Beats:
+//   1. Expand horizontal tabs into precise column space stops.
+//   2. Strip single line according to 1-indexed column boundaries.
+//   3. Handle range inversion (cutting/keeping specified column slices).
+//   4. Execute multi-line stream stripping with aggregate telemetry.
+
+import "core/colrm_types.oo";
+
+pub fn expand_tabs(line: String, tab_width: Int) -> String {
+    let tw: Int = if tab_width <= 0 { 8 } else { tab_width };
+    let n: Int = chars_len(line);
+    let mut out: String = "";
+    let mut col: Int = 0;
+    let mut i: Int = 0;
+
+    while i < n {
+        let b: Int = byte_at(line, i);
+        if b == 9 {
+            // Tab character
+            let spaces_to_add: Int = tw - (col % tw);
+            let mut s: Int = 0;
+            while s < spaces_to_add {
+                out = out + " ";
+                s = s + 1;
+            }
+            col = col + spaces_to_add;
+        } else if b == 8 {
+            // Backspace character
+            out = out + str_slice(line, i, i + 1);
+            if col > 0 { col = col - 1; }
+        } else {
+            out = out + str_slice(line, i, i + 1);
+            col = col + 1;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn strip_line(line: String, cfg: ColrmConfig) -> LineResult {
+    let work_line: String = if cfg.expand_tabs {
+        expand_tabs(line, cfg.tab_width)
+    } else {
+        line
+    };
+
+    let n: Int = chars_len(work_line);
+    if n == 0 {
+        return make_line_result(line, "", 0);
+    }
+
+    let start: Int = cfg.range.start;
+    let stop: Int = cfg.range.stop;
+
+    // If start is beyond end of line, line is untouched
+    if start > n {
+        return make_line_result(line, work_line, 0);
+    }
+
+    // Invalid range where stop is strictly less than start
+    if stop > 0 && stop < start {
+        return make_line_result(line, work_line, 0);
+    }
+
+    let start_idx: Int = start - 1;
+
+    // Single argument: remove from start through end of line
+    if stop <= 0 {
+        if cfg.invert {
+            let slice: String = str_slice(work_line, start_idx, n);
+            return make_line_result(line, slice, start_idx);
+        } else {
+            let slice: String = str_slice(work_line, 0, start_idx);
+            return make_line_result(line, slice, n - start_idx);
+        }
+    }
+
+    // Range argument: remove from start through stop
+    let stop_idx: Int = if stop > n { n } else { stop };
+
+    if cfg.invert {
+        let slice: String = str_slice(work_line, start_idx, stop_idx);
+        let stripped_cnt: Int = n - (stop_idx - start_idx);
+        return make_line_result(line, slice, stripped_cnt);
+    }
+
+    let prefix: String = str_slice(work_line, 0, start_idx);
+    let suffix: String = if stop_idx < n {
+        str_slice(work_line, stop_idx, n)
+    } else {
+        ""
+    };
+
+    let stripped_cnt: Int = stop_idx - start_idx;
+    let mut fill: String = "";
+    if chars_len(cfg.replace_char) > 0 {
+        let rep: String = str_slice(cfg.replace_char, 0, 1);
+        let mut k: Int = 0;
+        while k < stripped_cnt {
+            fill = fill + rep;
+            k = k + 1;
+        }
+    }
+
+    let result_str: String = prefix + fill + suffix;
+    return make_line_result(line, result_str, stripped_cnt);
+}
+
+pub fn strip_text_stream(content: String, cfg: ColrmConfig) -> ColrmRunResult {
+    let mut stats: ColrmStats = make_colrm_stats();
+    stats.bytes_in = chars_len(content);
+
+    let n: Int = chars_len(content);
+    if n == 0 {
+        return make_colrm_run_result("", stats);
+    }
+
+    let mut out: String = "";
+    let mut line_start: Int = 0;
+    let mut i: Int = 0;
+
+    while i < n {
+        if byte_at(content, i) == 10 {
+            let raw_line: String = str_slice(content, line_start, i);
+            let lr: LineResult = strip_line(raw_line, cfg);
+            out = out + lr.processed + "\n";
+            stats.lines_processed = stats.lines_processed + 1;
+            stats.chars_stripped = stats.chars_stripped + lr.stripped_count;
+            line_start = i + 1;
+        }
+        i = i + 1;
+    }
+
+    // Handle trailing line without newline
+    if line_start < n {
+        let raw_line: String = str_slice(content, line_start, n);
+        let lr: LineResult = strip_line(raw_line, cfg);
+        out = out + lr.processed;
+        stats.lines_processed = stats.lines_processed + 1;
+        stats.chars_stripped = stats.chars_stripped + lr.stripped_count;
+    }
+
+    stats.bytes_out = chars_len(out);
+    return make_colrm_run_result(out, stats);
+}

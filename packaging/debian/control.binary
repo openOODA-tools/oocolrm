@@ -1,0 +1,11 @@
+Package: oocolrm
+Version: 0.2.0-1
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: openOODA-tools <ops@openooda.org>
+Depends: libc6
+Description: COLUMN STRIPPER
+ Strips character columns from line streams using precise byte column boundaries.
+ Capability-bounded openOODA utility with zero ambient authority,
+ tab expansion, and native Model Context Protocol (MCP) surface.

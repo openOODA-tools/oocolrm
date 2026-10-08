@@ -1,0 +1,74 @@
+// # oocolrm IPC Subsystem Verification Anchor
+//
+// Logline: Certifies JSON-RPC 2.0 stdio handling, CLI argument parsing, and tool dispatch.
+//
+// Setup: Validates protocol converters against deterministic JSON strings and CLI arguments.
+//
+// Beats:
+//   1. Assert JSON string escaping and unescaping fidelity.
+//   2. Assert JSON key/value extraction for strings, integers, and booleans.
+//   3. Assert CLI option parsing across positional and flag invocations.
+//   4. Assert MCP protocol handshakes and tool dispatch execution.
+
+import "core/colrm_types.oo";
+import "core/colrm_engine.oo";
+import "ipc/json_field.oo";
+import "ipc/colrm_opts.oo";
+import "ipc/mcp_serve.oo";
+
+pub fn verify_ipc_subsystem(fs: &FsReadCap) -> Bool {
+    let esc: String = json_escape("test\"quotes\" and \\slashes\\");
+    if !str_contains(esc, "\\\"") || !str_contains(esc, "\\\\") {
+        return false;
+    }
+
+    let unesc: String = json_unescape("hello\\tworld");
+    if !str_contains(unesc, "\t") {
+        return false;
+    }
+
+    let sample_json: String = "{\"tool\":\"colrm_strip\",\"start\":3,\"stop\":7,\"expand_tabs\":true}";
+    let tool_val: String = extract_json_str(sample_json, "tool");
+    if tool_val != "colrm_strip" {
+        return false;
+    }
+    let start_val: Int = extract_json_int(sample_json, "start", 1);
+    if start_val != 3 {
+        return false;
+    }
+    let tab_flag: Bool = extract_json_bool(sample_json, "expand_tabs", false);
+    if !tab_flag {
+        return false;
+    }
+
+    let mut cli_args: List[String] = list_new();
+    cli_args = list_push(cli_args, "4");
+    cli_args = list_push(cli_args, "8");
+    cli_args = list_push(cli_args, "--expand-tabs");
+    cli_args = list_push(cli_args, "input.txt");
+
+    let opts: ColrmCliOpts = parse_cli_args(cli_args);
+    if opts.start != 4 || opts.stop != 8 || !opts.expand_tabs || opts.file_path != "input.txt" {
+        return false;
+    }
+
+    let init_req: String = "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"initialize\"}";
+    let init_resp: String = handle_mcp_message(init_req);
+    if !str_contains(init_resp, "\"protocolVersion\":\"2024-11-05\"") || !str_contains(init_resp, "oocolrm") {
+        return false;
+    }
+
+    let list_req: String = "{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"method\":\"tools/list\"}";
+    let list_resp: String = handle_mcp_message(list_req);
+    if !str_contains(list_resp, "colrm_strip") || !str_contains(list_resp, "colrm_slice") {
+        return false;
+    }
+
+    let call_req: String = "{\"jsonrpc\":\"2.0\",\"id\":\"3\",\"method\":\"tools/call\",\"name\":\"colrm_strip\",\"text\":\"1234567890\",\"start\":4,\"stop\":7}";
+    let call_resp: String = handle_mcp_message(call_req);
+    if !str_contains(call_resp, "123890") {
+        return false;
+    }
+
+    return true;
+}

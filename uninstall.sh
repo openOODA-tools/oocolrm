@@ -4,7 +4,7 @@
 # "Removes oocolrm binary, package installations, and cache."
 #
 # Usage:
-#   curl -fsSL https://openooda-toocolrm.github.io/oocolrm/uninstall.sh | bash
+#   curl -fsSL https://openooda-tools.github.io/oocolrm/uninstall.sh | bash
 #   or: ./uninstall.sh [options]
 #
 # Options:

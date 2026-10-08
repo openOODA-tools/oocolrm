@@ -1,0 +1,39 @@
+// # oocolrm Demonstration Fixtures
+//
+// Logline: Synthetic text streams, fixed-width tables, and demonstration scenarios for column stripping.
+//
+// Setup: Deterministic test corpora exercising column boundaries, tabs, and replacements.
+//
+// Beats:
+//   1. Build canonical fixed-width numeric fixture.
+//   2. Build multi-column log tabular fixture.
+//   3. Build tab-delimited record fixture.
+//   4. Execute demonstration scenario returning processing telemetry.
+
+import "core/colrm_types.oo";
+import "core/colrm_engine.oo";
+
+pub fn build_numeric_fixture() -> String {
+    return "12345678901234567890\n"
+        + "abcdefghijklmnopqrst\n"
+        + "ABCDEFGHIJKLMNOPQRST\n";
+}
+
+pub fn build_log_fixture() -> String {
+    return "2026-10-08T01:00:00Z [INFO] system initialization complete\n"
+        + "2026-10-08T01:00:05Z [WARN] memory threshold reached 80%\n"
+        + "2026-10-08T01:00:10Z [ERROR] network interface eno1 dropped\n";
+}
+
+pub fn build_tab_fixture() -> String {
+    return "col1\tcol2\tcol3\n"
+        + "alpha\tbeta\tgamma\n"
+        + "first\tsecond\tthird\n";
+}
+
+pub fn run_colrm_demo() -> ColrmRunResult {
+    let input_text: String = build_log_fixture();
+    // Strip timestamp (columns 1 through 21 inclusive)
+    let cfg: ColrmConfig = make_colrm_config(1, 21, false, 8, "", false);
+    return strip_text_stream(input_text, cfg);
+}

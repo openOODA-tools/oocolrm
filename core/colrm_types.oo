@@ -1,0 +1,91 @@
+// # oocolrm Data Types Subsystem
+//
+// Logline: Data structures defining column ranges, stripper configurations, and telemetry statistics.
+//
+// Setup: Encapsulates 1-based column coordinates and processing options with zero ambient authority.
+//
+// Beats:
+//   1. Declare ColrmRange encapsulating 1-indexed column start and stop offsets.
+//   2. Declare ColrmConfig encapsulating tab width, replacement characters, and modes.
+//   3. Declare LineResult encapsulating before/after strings and delta metrics.
+//   4. Declare ColrmStats encapsulating aggregate processing metrics.
+
+pub type ColrmRange = struct {
+    start: Int,
+    stop: Int
+};
+
+pub fn make_colrm_range(start: Int, stop: Int) -> ColrmRange {
+    let s: Int = if start < 1 { 1 } else { start };
+    let e: Int = if stop < 0 { 0 } else { stop };
+    return ColrmRange { start: s, stop: e };
+}
+
+pub type ColrmConfig = struct {
+    range: ColrmRange,
+    expand_tabs: Bool,
+    tab_width: Int,
+    replace_char: String,
+    invert: Bool
+};
+
+pub fn make_colrm_config(
+    start: Int,
+    stop: Int,
+    expand_tabs: Bool,
+    tab_width: Int,
+    replace_char: String,
+    invert: Bool
+) -> ColrmConfig {
+    let tw: Int = if tab_width <= 0 { 8 } else { tab_width };
+    return ColrmConfig {
+        range: make_colrm_range(start, stop),
+        expand_tabs: expand_tabs,
+        tab_width: tw,
+        replace_char: replace_char,
+        invert: invert
+    };
+}
+
+pub type LineResult = struct {
+    original: String,
+    processed: String,
+    stripped_count: Int
+};
+
+pub fn make_line_result(
+    orig: String,
+    proc_str: String,
+    stripped: Int
+) -> LineResult {
+    return LineResult {
+        original: orig,
+        processed: proc_str,
+        stripped_count: stripped
+    };
+}
+
+pub type ColrmStats = struct {
+    lines_processed: Int,
+    chars_stripped: Int,
+    bytes_in: Int,
+    bytes_out: Int
+};
+
+pub fn make_colrm_stats() -> ColrmStats {
+    return ColrmStats {
+        lines_processed: 0,
+        chars_stripped: 0,
+        bytes_in: 0,
+        bytes_out: 0
+    };
+}
+
+pub type ColrmRunResult = struct {
+    output: String,
+    stats: ColrmStats
+};
+
+pub fn make_colrm_run_result(out: String, stats: ColrmStats) -> ColrmRunResult {
+    return ColrmRunResult { output: out, stats: stats };
+}
