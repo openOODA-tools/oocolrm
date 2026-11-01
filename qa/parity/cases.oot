@@ -20,3 +20,9 @@
 
 match --demo
 match --demo --json
+match 5
+match 4 7
+match 1 3
+match 4 6 -r .
+match 3 6 -v
+match 2 8 -x
