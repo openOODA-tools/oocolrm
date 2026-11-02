@@ -1,0 +1,38 @@
+# Parity cases for oocolrm.
+# The tool replaces colrm and must behave the same way.
+# upstream: colrm
+# tool: dist/oocolrm
+#
+# A match case must produce the same stdout, the same stderr, and the same
+# exit code as the upstream tool. A differ case is a declared deviation: the
+# exit code must still be the same, but the output may differ.
+#
+# The upstream tool is the reference. A tool that is not a drop-in
+# replacement must fix the difference or declare the deviation here.
+#
+# The workflow installs the upstream tool. The parity runner reads this table
+# from the repository root and runs every case with the same arguments
+# against both tools. A case that the upstream tool does not understand is
+# skipped, because the upstream cannot be the reference there.
+#
+# The cases come from the test recipe of this repository, so they are the
+# arguments this tool already claims to accept.
+#
+# A case may be preceded by an input line. That line names the command that
+# makes the input of the case and its arguments. The runner pipes that command
+# into both tools, so a tool that works on a stream is compared on a stream.
+
+match --demo
+match --demo --json
+input printf 1234567890\n
+match 5
+input printf 1234567890\n
+match 4 7
+input printf abcdefgh\n
+match 1 3
+input printf 123456789\n
+match 4 6 -r .
+input printf abcdefgh\n
+match 3 6 -v
+input printf a\tb\n
+match 2 8 -x
